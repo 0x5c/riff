@@ -328,46 +328,45 @@ fn main() {
         panic!("Panicking on purpose");
     }
 
-    if let (Some(file1), Some(file2)) = (options.c1, options.c2) {
+    match options {
         // "riff file1 file2"
-        exec_diff_highlight(
+        Options{c1: Some(file1), c2: Some(file2), ..} => exec_diff_highlight(
             &file1,
             &file2,
             options.ignore_space_change,
             options.no_pager,
-        );
-        return;
-    }
+        ),
+        // "riff -f file"
+        Options{file: Some(diff_path), ..} => {
+            if diff_path.is_dir() {
+                eprintln!("ERROR: --file cannot be a directory");
+                exit(1)
+            }
 
-    if let Some(diff_path) = options.file {
-        // riff -f file
-        if diff_path.is_dir() {
-            eprintln!("ERROR: --file cannot be a directory");
-            exit(1)
-        }
+            let mut diff_file = match File::open(diff_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("ERROR: Can't read file: {}", e);
+                    exit(1);
+                }
+            };
 
-        let mut diff_file = match File::open(diff_path) {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("ERROR: Can't read file: {}", e);
+            highlight_stream(&mut diff_file, options.no_pager);
+        },
+        _ => {
+            if io::stdin().is_terminal() {
+                eprintln!("ERROR: Expected input from a pipe");
+                eprintln!();
+
+                // Print help to stderr
+                Options::command().write_help(&mut io::stderr()).unwrap();
+        
                 exit(1);
             }
-        };
-        highlight_stream(&mut diff_file, options.no_pager);
-        return;
+
+            highlight_stream(&mut io::stdin().lock(), options.no_pager);
+        }
     }
-
-    if io::stdin().is_terminal() {
-        eprintln!("ERROR: Expected input from a pipe");
-        eprintln!();
-
-        // Print help to stderr
-        Options::command().write_help(&mut io::stderr()).unwrap();
-
-        exit(1);
-    }
-
-    highlight_stream(&mut io::stdin().lock(), options.no_pager);
 }
 
 #[cfg(test)]
